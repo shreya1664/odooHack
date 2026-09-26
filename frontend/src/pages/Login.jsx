@@ -8,16 +8,27 @@ import {
     ArrowRight,
     ShieldCheck,
 } from "lucide-react";
+import { login } from "../services/api";
 
 function Login({ onLogin, onRegister, onForgotPassword }) {
     const [showPassword, setShowPassword] = useState(false);
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        onLogin();
-    };
+    const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    try {
+        const data = await login(email, password);
+
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data.user));
+
+        onLogin(data.user);
+    } catch (error) {
+        alert(error.message);
+    }
+};
 
     return (
         <div className="min-h-screen bg-[#F0E9DD] text-[#292824]">

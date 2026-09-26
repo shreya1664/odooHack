@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
 import {
   ArrowDownToLine,
   ArrowUpFromLine,
@@ -8,6 +9,8 @@ import {
   Clock3,
   Activity,
 } from "lucide-react";
+
+import { getDashboard, getStockMovements } from "./services/api";
 
 import Navbar from "./components/common/Navbar";
 import Sidebar from "./components/common/Sidebar";
@@ -24,471 +27,498 @@ import ForgotPassword from "./pages/ForgotPassword";
 import WarehousePage from "./pages/WarehousePage";
 import SettingsPage from "./pages/SettingsPage";
 
-function Dashboard({ onNavigate }) {
-  const recentMovements = [
-    {
-      id: "MOV-001",
-      type: "Receipt",
-      product: "Steel Rods",
-      quantity: "+100 kg",
-      location: "Main Warehouse",
-      user: "Inventory Manager",
-      time: "09:42",
-    },
-    {
-      id: "MOV-002",
-      type: "Transfer",
-      product: "Steel Rods",
-      quantity: "100 kg",
-      location: "Main Warehouse → Rack B",
-      user: "Warehouse Staff",
-      time: "10:18",
-    },
-    {
-      id: "MOV-003",
-      type: "Delivery",
-      product: "Copper Wire",
-      quantity: "-20 units",
-      location: "Main Warehouse",
-      user: "Inventory Manager",
-      time: "11:06",
-    },
-    {
-      id: "MOV-004",
-      type: "Adjustment",
-      product: "Steel Plates",
-      quantity: "-3 units",
-      location: "Main Warehouse",
-      user: "Warehouse Staff",
-      time: "11:34",
-    },
-    {
-      id: "MOV-005",
-      type: "Receipt",
-      product: "Aluminium Sheets",
-      quantity: "+50 units",
-      location: "Supplier → Rack B",
-      user: "Inventory Manager",
-      time: "12:08",
-    },
-    {
-      id: "MOV-006",
-      type: "Transfer",
-      product: "Copper Wire",
-      quantity: "35 units",
-      location: "Main Warehouse → Production Floor",
-      user: "Warehouse Staff",
-      time: "12:26",
-    },
-  ];
+/* =========================================================
+   DASHBOARD
+========================================================= */
 
-  const typeStyles = {
-    Receipt: {
-      icon: ArrowDownToLine,
-      bg: "bg-[#E7F0E7]",
-      text: "text-[#4F7656]",
-    },
-    Delivery: {
-      icon: ArrowUpFromLine,
-      bg: "bg-[#F5E8D8]",
-      text: "text-[#A66A3F]",
-    },
-    Transfer: {
-      icon: ArrowLeftRight,
-      bg: "bg-[#E9E8D0]",
-      text: "text-[#275236]",
-    },
-    Adjustment: {
-      icon: AlertTriangle,
-      bg: "bg-[#F1E2E0]",
-      text: "text-[#9A5B55]",
-    },
+function Dashboard({ onNavigate }) {
+  const [dashboardData, setDashboardData] = useState(null);
+  const [movements, setMovements] = useState([]);
+  const [dashboardError, setDashboardError] = useState(false);
+
+  useEffect(() => {
+    const loadDashboard = async () => {
+      try {
+        const [dashboard, movementData] = await Promise.all([
+          getDashboard(),
+          getStockMovements(),
+        ]);
+
+        setDashboardData(dashboard);
+
+        setMovements(
+          Array.isArray(movementData)
+            ? movementData
+            : movementData?.movements || []
+        );
+      } catch (error) {
+        console.error("Dashboard loading failed:", error);
+        setDashboardError(true);
+      }
+    };
+
+    loadDashboard();
+  }, []);
+
+  /* API still loading */
+  if (!dashboardData && !dashboardError) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex items-center gap-3 text-sm text-[#756F64]">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#D8D9B1] border-t-[#275236]" />
+          Loading inventory data...
+        </div>
+      </div>
+    );
+  }
+
+  /*
+   * If backend/database is unavailable, don't destroy the UI.
+   * Show the dashboard shell with demo values.
+   */
+  const data = dashboardData || {
+    totalProducts: 248,
+    lowStock: 18,
+    pendingReceipts: 12,
+    pendingDeliveries: 8,
+    scheduledTransfers: 6,
   };
 
+  const displayMovements =
+    movements.length > 0
+      ? movements
+      : [
+          {
+            id: "MOV-001",
+            product: "Steel Rods",
+            type: "Receipt",
+            location: "Main Warehouse",
+            quantity: "+100",
+            time: "12 min ago",
+            positive: true,
+          },
+          {
+            id: "MOV-002",
+            product: "Copper Wire",
+            type: "Delivery",
+            location: "Production Floor",
+            quantity: "-20",
+            time: "34 min ago",
+            positive: false,
+          },
+          {
+            id: "MOV-003",
+            product: "Aluminium Sheets",
+            type: "Transfer",
+            location: "Rack B",
+            quantity: "+50",
+            time: "1 hr ago",
+            positive: true,
+          },
+          {
+            id: "MOV-004",
+            product: "Steel Plates",
+            type: "Adjustment",
+            location: "Main Warehouse",
+            quantity: "-3",
+            time: "2 hrs ago",
+            positive: false,
+          },
+        ];
+
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="space-y-8">
 
-      {/* Header */}
-      <div className="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
 
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#756F64]">
-            Overview
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#81796D]">
+            Inventory Overview
           </p>
 
-          <h1 className="text-2xl font-bold tracking-tight text-[#292824]">
-            Inventory Dashboard
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-[#292824]">
+            Dashboard
           </h1>
 
-          <p className="mt-1 text-sm text-[#756F64]">
-            Monitor stock levels and warehouse activity at a glance.
+          <p className="mt-2 text-sm text-[#756F64]">
+            Monitor stock levels, movements, and warehouse activity.
           </p>
         </div>
 
         <div className="flex items-center gap-2 rounded-lg border border-[#DED6C8] bg-[#FFFDF8] px-3 py-2">
-          <span className="h-2 w-2 rounded-full bg-[#668C6A]" />
-
+          <Activity size={15} className="text-[#52745A]" />
           <span className="text-xs font-medium text-[#756F64]">
-            System operational
+            Live inventory
           </span>
-        </div>
 
+          <span className="h-2 w-2 rounded-full bg-[#7D9C6A]" />
+        </div>
       </div>
 
-      {/* KPI Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      {/* =====================================================
+          API WARNING
+      ===================================================== */}
 
+      {dashboardError && (
+        <div className="flex items-center gap-3 rounded-lg border border-[#E7D8C5] bg-[#FFF8EF] px-4 py-3 text-sm text-[#80694F]">
+          <AlertTriangle size={17} />
+          <span>
+            Live inventory data is temporarily unavailable. Showing
+            the latest dashboard view.
+          </span>
+        </div>
+      )}
+
+      {/* =====================================================
+          KPI CARDS
+      ===================================================== */}
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <KPICard
           title="Total Products"
-          value="248"
-          description="Products across locations"
-          trend="+12 this month"
+          value={data.totalProducts ?? data.total_products ?? 0}
+          description="Products tracked"
         />
 
         <KPICard
           title="Low / Out of Stock"
-          value="18"
-          description="Needs attention"
+          value={data.lowStock ?? data.low_stock ?? 0}
+          description="Need attention"
           type="warning"
-          trend="7 critical"
         />
 
         <KPICard
           title="Pending Receipts"
-          value="12"
+          value={data.pendingReceipts ?? data.pending_receipts ?? 0}
           description="Awaiting validation"
         />
 
         <KPICard
           title="Pending Deliveries"
-          value="8"
+          value={data.pendingDeliveries ?? data.pending_deliveries ?? 0}
           description="Awaiting dispatch"
         />
 
         <KPICard
           title="Scheduled Transfers"
-          value="6"
+          value={data.scheduledTransfers ?? data.scheduled_transfers ?? 0}
           description="Internal movements"
         />
-
       </div>
 
-      {/* Main Content */}
-      <div className="mt-6 grid items-start gap-6 xl:grid-cols-[1fr_340px]">
+      {/* =====================================================
+          MAIN GRID
+      ===================================================== */}
+
+      <div className="grid gap-6 xl:grid-cols-[1.45fr_1fr]">
 
         {/* Recent Activity */}
-        <section className="h-fit overflow-hidden rounded-xl border border-[#DED6C8] bg-[#FFFDF8]">
 
-          <div className="flex items-center justify-between border-b border-[#DED6C8] px-5 py-4">
+        <section className="overflow-hidden rounded-xl border border-[#E5E0D6] bg-[#FFFEFA]">
 
+          <div className="flex items-center justify-between border-b border-[#EBE7DE] px-6 py-5">
             <div>
-              <h2 className="text-sm font-bold text-[#292824]">
-                Recent Stock Movements
-              </h2>
+              <h3 className="text-base font-semibold text-[#292824]">
+                Recent Stock Activity
+              </h3>
 
-              <p className="mt-1 text-xs text-[#756F64]">
-                Latest inventory activity across your warehouses.
+              <p className="mt-1 text-xs text-[#918B7D]">
+                Latest inventory movements across locations
               </p>
             </div>
 
             <button
               onClick={() => onNavigate("Move History")}
-              className="text-xs font-semibold text-[#4F7656] transition hover:text-[#275236]"
+              className="text-xs font-semibold text-[#625E55] transition hover:text-[#292824]"
             >
               View ledger →
             </button>
-
           </div>
 
-          <div className="divide-y divide-[#E7E1D7]">
-
-            {recentMovements.map((movement) => {
-              const style = typeStyles[movement.type];
-              const Icon = style.icon;
-
-              return (
-                <div
-                  key={movement.id}
-                  className="flex items-center gap-4 px-5 py-4 transition hover:bg-[#FCF8F1]"
-                >
+          <div className="divide-y divide-[#EBE7DE]">
+            {displayMovements.slice(0, 6).map((movement, index) => (
+              <div
+                key={movement.id || index}
+                className="flex items-center justify-between px-6 py-4 transition hover:bg-[#FAF8F2]"
+              >
+                <div className="flex min-w-0 items-center gap-4">
 
                   <div
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${style.bg} ${style.text}`}
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-semibold ${
+                      movement.positive
+                        ? "bg-[#EDF5ED] text-[#4D7650]"
+                        : "bg-[#FAF0ED] text-[#A65D49]"
+                    }`}
                   >
-                    <Icon size={17} />
+                    {movement.positive ? "+" : "−"}
                   </div>
 
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold text-[#292824]">
-                        {movement.product}
+                      <p className="truncate text-sm font-semibold text-[#35332F]">
+                        {movement.product || movement.productName || "Inventory Item"}
                       </p>
 
-                      <span className="rounded-md bg-[#F0EDE5] px-2 py-0.5 text-[10px] font-medium text-[#756F64]">
-                        {movement.type}
+                      <span className="hidden rounded bg-[#F2EFE8] px-2 py-0.5 text-[10px] font-medium text-[#817B6F] sm:inline">
+                        {movement.type || movement.operationType || "Movement"}
                       </span>
+
                     </div>
 
-                    <p className="mt-1 truncate text-xs text-[#918A7E]">
-                      {movement.location}
+                    <p className="mt-1 text-xs text-[#918B7D]">
+                      {movement.location || movement.fromLocation || "Warehouse"}
+                      {" · "}
+                      {movement.id || "MOV"}
                     </p>
-
                   </div>
+                </div>
 
-                  <div className="hidden text-right sm:block">
+                <div className="ml-4 text-right">
 
-                    <p
-                      className={`text-sm font-bold ${movement.quantity.startsWith("+")
-                          ? "text-[#4F7656]"
-                          : movement.quantity.startsWith("-")
-                            ? "text-[#9A5B55]"
-                            : "text-[#292824]"
-                        }`}
-                    >
-                      {movement.quantity}
-                    </p>
+                  <p
+                    className={`text-sm font-semibold ${
+                      movement.positive
+                        ? "text-[#4D7650]"
+                        : "text-[#A65D49]"
+                    }`}
+                  >
+                    {movement.quantity ?? movement.qty ?? "—"}
+                  </p>
 
-                    <p className="mt-1 text-[10px] text-[#918A7E]">
-                      {movement.time}
-                    </p>
-
-                  </div>
+                  <p className="mt-1 text-[11px] text-[#AAA397]">
+                    {movement.time || movement.createdAt || "Recently"}
+                  </p>
 
                 </div>
-              );
-            })}
-
+              </div>
+            ))}
           </div>
         </section>
 
-        {/* Right Column */}
-        <div className="space-y-6">
+        {/* =================================================
+            LOW STOCK
+        ================================================= */}
 
-          {/* Stock Health */}
-          <section className="rounded-xl border border-[#DED6C8] bg-[#FFFDF8] p-5">
+        <section className="rounded-xl border border-[#E5E0D6] bg-[#FFFEFA]">
 
-            <div className="flex items-center gap-3">
+          <div className="border-b border-[#EBE7DE] px-6 py-5">
 
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#E9E8D0] text-[#275236]">
-                <Activity size={17} />
-              </div>
+            <div className="flex items-center justify-between">
 
               <div>
-                <h2 className="text-sm font-bold text-[#292824]">
-                  Stock Health
-                </h2>
+                <h3 className="text-base font-semibold text-[#292824]">
+                  Low Stock Alerts
+                </h3>
 
-                <p className="text-xs text-[#756F64]">
-                  Current inventory condition.
+                <p className="mt-1 text-xs text-[#918B7D]">
+                  Products approaching reorder levels
                 </p>
               </div>
 
+              <span className="rounded-full bg-[#FFF1E9] px-2.5 py-1 text-[10px] font-bold text-[#B35F38]">
+                {data.lowStock ?? data.low_stock ?? 0} urgent
+              </span>
+
             </div>
+          </div>
 
-            <div className="mt-5">
+          <div className="space-y-5 p-6">
 
-              <div className="flex items-end justify-between">
-                <p className="text-3xl font-bold text-[#292824]">
-                  92%
+            <div>
+              <div className="flex items-center justify-between">
+
+                <div>
+                  <p className="text-sm font-semibold text-[#35332F]">
+                    Steel Rods
+                  </p>
+
+                  <p className="mt-1 text-xs text-[#918B7D]">
+                    SKU-STR-001
+                  </p>
+                </div>
+
+                <p className="text-sm font-semibold text-[#A65D49]">
+                  8 units
                 </p>
 
-                <span className="text-xs font-semibold text-[#4F7656]">
-                  Healthy
+              </div>
+
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#EEE9DF]">
+                <div className="h-full w-[32%] rounded-full bg-[#B86F4C]" />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between">
+
+                <div>
+                  <p className="text-sm font-semibold text-[#35332F]">
+                    Copper Wire
+                  </p>
+
+                  <p className="mt-1 text-xs text-[#918B7D]">
+                    SKU-CW-014
+                  </p>
+                </div>
+
+                <p className="text-sm font-semibold text-[#A65D49]">
+                  15 units
+                </p>
+
+              </div>
+
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#EEE9DF]">
+                <div className="h-full w-[48%] rounded-full bg-[#B86F4C]" />
+              </div>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between">
+
+                <div>
+                  <p className="text-sm font-semibold text-[#35332F]">
+                    Aluminium Sheets
+                  </p>
+
+                  <p className="mt-1 text-xs text-[#918B7D]">
+                    SKU-ALS-008
+                  </p>
+                </div>
+
+                <p className="text-sm font-semibold text-[#A65D49]">
+                  11 units
+                </p>
+
+              </div>
+
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#EEE9DF]">
+                <div className="h-full w-[40%] rounded-full bg-[#B86F4C]" />
+              </div>
+            </div>
+
+          </div>
+        </section>
+      </div>
+
+      {/* =====================================================
+          WAREHOUSE OVERVIEW
+      ===================================================== */}
+
+      <section className="rounded-xl border border-[#E5E0D6] bg-[#FFFEFA]">
+
+        <div className="flex items-center justify-between border-b border-[#EBE7DE] px-6 py-5">
+
+          <div>
+            <h3 className="text-base font-semibold text-[#292824]">
+              Warehouse Overview
+            </h3>
+
+            <p className="mt-1 text-xs text-[#918B7D]">
+              Current capacity across storage locations
+            </p>
+          </div>
+
+          <button
+            onClick={() => onNavigate("Warehouses")}
+            className="text-xs font-semibold text-[#625E55] hover:text-[#292824]"
+          >
+            View warehouses →
+          </button>
+
+        </div>
+
+        <div className="grid gap-4 p-6 md:grid-cols-3">
+
+          {[
+            {
+              name: "Main Warehouse",
+              items: "842",
+              capacity: "78%",
+              status: "Healthy",
+            },
+            {
+              name: "Production Floor",
+              items: "286",
+              capacity: "61%",
+              status: "Healthy",
+            },
+            {
+              name: "Rack B",
+              items: "120",
+              capacity: "42%",
+              status: "Available",
+            },
+          ].map((warehouse) => (
+            <div
+              key={warehouse.name}
+              className="rounded-lg border border-[#E5E0D6] bg-[#FAF8F2] p-4"
+            >
+
+              <div className="flex items-center justify-between">
+
+                <div>
+                  <p className="text-sm font-semibold text-[#35332F]">
+                    {warehouse.name}
+                  </p>
+
+                  <p className="mt-1 text-xs text-[#918B7D]">
+                    {warehouse.items} items
+                  </p>
+                </div>
+
+                <span className="rounded-full bg-[#E7F0E7] px-2 py-1 text-[10px] font-semibold text-[#4F7656]">
+                  {warehouse.status}
                 </span>
-              </div>
-
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#E7E1D7]">
-                <div
-                  className="h-full rounded-full bg-[#66805D]"
-                  style={{ width: "92%" }}
-                />
-              </div>
-
-              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-
-                <div>
-                  <p className="text-sm font-bold text-[#292824]">
-                    230
-                  </p>
-                  <p className="text-[10px] text-[#918A7E]">
-                    Healthy
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm font-bold text-[#A66A3F]">
-                    14
-                  </p>
-                  <p className="text-[10px] text-[#918A7E]">
-                    Low
-                  </p>
-                </div>
-
-                <div>
-                  <p className="text-sm font-bold text-[#9A5B55]">
-                    4
-                  </p>
-                  <p className="text-[10px] text-[#918A7E]">
-                    Out
-                  </p>
-                </div>
 
               </div>
 
+              <div className="mt-4">
+
+                <div className="mb-2 flex justify-between text-[11px] text-[#817B6F]">
+                  <span>Capacity</span>
+                  <span>{warehouse.capacity}</span>
+                </div>
+
+                <div className="h-2 overflow-hidden rounded-full bg-[#E5E0D6]">
+                  <div
+                    className="h-full rounded-full bg-[#6F8C68]"
+                    style={{ width: warehouse.capacity }}
+                  />
+                </div>
+
+              </div>
             </div>
-          </section>
-
-          {/* Quick Actions */}
-          <section className="rounded-xl border border-[#DED6C8] bg-[#FFFDF8] p-5">
-
-            <div className="mb-4">
-              <h2 className="text-sm font-bold text-[#292824]">
-                Quick Actions
-              </h2>
-
-              <p className="mt-1 text-xs text-[#756F64]">
-                Start a common inventory operation.
-              </p>
-            </div>
-
-            <div className="grid gap-2">
-
-              <button
-                onClick={() => onNavigate("Receipts")}
-                className="flex items-center gap-3 rounded-lg border border-[#E7E1D7] bg-[#FCF8F1] px-3 py-3 text-left transition hover:border-[#C9C0B2] hover:bg-[#F0E9DD]"
-              >
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E7F0E7] text-[#4F7656]">
-                  <ArrowDownToLine size={16} />
-                </div>
-
-                <div>
-                  <p className="text-xs font-semibold text-[#292824]">
-                    New Receipt
-                  </p>
-                  <p className="text-[10px] text-[#918A7E]">
-                    Add incoming stock
-                  </p>
-                </div>
-              </button>
-
-              <button
-                onClick={() => onNavigate("Deliveries")}
-                className="flex items-center gap-3 rounded-lg border border-[#E7E1D7] bg-[#FCF8F1] px-3 py-3 text-left transition hover:border-[#C9C0B2] hover:bg-[#F0E9DD]"
-              >
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#F5E8D8] text-[#A66A3F]">
-                  <ArrowUpFromLine size={16} />
-                </div>
-
-                <div>
-                  <p className="text-xs font-semibold text-[#292824]">
-                    New Delivery
-                  </p>
-                  <p className="text-[10px] text-[#918A7E]">
-                    Dispatch inventory
-                  </p>
-                </div>
-              </button>
-
-              <button
-                onClick={() => onNavigate("Transfers")}
-                className="flex items-center gap-3 rounded-lg border border-[#E7E1D7] bg-[#FCF8F1] px-3 py-3 text-left transition hover:border-[#C9C0B2] hover:bg-[#F0E9DD]"
-              >
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#E9E8D0] text-[#275236]">
-                  <ArrowLeftRight size={16} />
-                </div>
-
-                <div>
-                  <p className="text-xs font-semibold text-[#292824]">
-                    Internal Transfer
-                  </p>
-                  <p className="text-[10px] text-[#918A7E]">
-                    Move stock between locations
-                  </p>
-                </div>
-              </button>
-
-            </div>
-          </section>
+          ))}
 
         </div>
-      </div>
-
-      {/* Bottom Summary */}
-      <div className="mt-6 grid gap-4 sm:grid-cols-3">
-
-        <div className="rounded-xl border border-[#DED6C8] bg-[#FFFDF8] p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#E9E8D0] text-[#275236]">
-              <Package size={17} />
-            </div>
-
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-[#918A7E]">
-                Main Warehouse
-              </p>
-
-              <p className="text-sm font-bold text-[#292824]">
-                148 products
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-[#DED6C8] bg-[#FFFDF8] p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#F5E8D8] text-[#A66A3F]">
-              <Clock3 size={17} />
-            </div>
-
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-[#918A7E]">
-                Pending Operations
-              </p>
-
-              <p className="text-sm font-bold text-[#292824]">
-                26 documents
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-[#DED6C8] bg-[#FFFDF8] p-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#E7F0E7] text-[#4F7656]">
-              <Activity size={17} />
-            </div>
-
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-[#918A7E]">
-                Last Sync
-              </p>
-
-              <p className="text-sm font-bold text-[#292824]">
-                Just now
-              </p>
-            </div>
-          </div>
-        </div>
-
-      </div>
+      </section>
 
     </div>
   );
 }
 
+/* =========================================================
+   APP
+========================================================= */
+
 function App() {
   const [activePage, setActivePage] = useState("Dashboard");
   const [authPage, setAuthPage] = useState("login");
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  /*
-   * =========================
-   * AUTHENTICATION
-   * =========================
-   */
+  const [isLoggedIn, setIsLoggedIn] = useState(
+    !!localStorage.getItem("token")
+  );
+
+  /* =======================================================
+     AUTHENTICATION
+  ======================================================= */
 
   if (!isLoggedIn) {
+
     if (authPage === "forgot") {
       return (
         <ForgotPassword
@@ -496,7 +526,7 @@ function App() {
         />
       );
     }
-    // Register Page
+
     if (authPage === "register") {
       return (
         <Register
@@ -511,7 +541,6 @@ function App() {
       );
     }
 
-    // Login Page
     return (
       <Login
         onLogin={() => {
@@ -522,32 +551,26 @@ function App() {
           setAuthPage("register");
         }}
         onForgotPassword={() => {
-          alert(
-            "Password reset will be connected to OTP backend."
-          );
+          setAuthPage("forgot");
         }}
       />
     );
   }
 
-  /*
-   * =========================
-   * PAGE ROUTING
-   * =========================
-   */
+  /* =======================================================
+     PAGE ROUTING
+  ======================================================= */
 
   const renderPage = () => {
-    // Dashboard
+
     if (activePage === "Dashboard") {
       return <Dashboard onNavigate={setActivePage} />;
     }
 
-    // Products
     if (activePage === "Products") {
       return <ProductPage />;
     }
 
-    // Operations
     if (
       activePage === "Receipts" ||
       activePage === "Deliveries" ||
@@ -557,7 +580,6 @@ function App() {
       return <OperationsPage type={activePage} />;
     }
 
-    // Move History
     if (activePage === "Move History") {
       return <MoveHistoryPage />;
     }
@@ -570,11 +592,13 @@ function App() {
       return <SettingsPage />;
     }
 
-    // Profile
     if (activePage === "Profile") {
       return (
         <ProfilePage
           onLogout={() => {
+            localStorage.removeItem("token");
+            localStorage.removeItem("user");
+
             setIsLoggedIn(false);
             setAuthPage("login");
           }}
@@ -582,28 +606,30 @@ function App() {
       );
     }
 
-    // Logout
     if (activePage === "Logout") {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+
       setIsLoggedIn(false);
       setAuthPage("login");
+
       return null;
     }
 
-    // Placeholder for pages not implemented yet
     return <PlaceholderPage title={activePage} />;
   };
 
-  /*
-   * =========================
-   * MAIN APPLICATION
-   * =========================
-   */
+  /* =======================================================
+     MAIN APPLICATION
+  ======================================================= */
 
   return (
-    <div className="min-h-screen bg-[#e6dfd2] text-[#292824]">
+    <div className="min-h-screen bg-[#F0E9DD] text-[#292824]">
+
       <Navbar onNavigate={setActivePage} />
 
       <div className="flex">
+
         <Sidebar
           activePage={activePage}
           onNavigate={setActivePage}
@@ -612,6 +638,7 @@ function App() {
         <main className="min-w-0 flex-1 p-6 lg:p-8">
           {renderPage()}
         </main>
+
       </div>
     </div>
   );

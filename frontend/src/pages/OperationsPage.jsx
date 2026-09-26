@@ -1,464 +1,527 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  ArrowLeftRight,
-  SlidersHorizontal,
-  FileText,
-  Package,
-  MapPin,
-  CheckCircle2,
-  Clock3,
+    ArrowDownToLine,
+    ArrowUpFromLine,
+    ArrowLeftRight,
+    SlidersHorizontal,
+    CheckCircle2,
+    Package,
+    MapPin,
+    User,
+    Hash,
+    Clock3,
+    AlertTriangle,
 } from "lucide-react";
 
-function OperationsPage({ type }) {
-  const [status, setStatus] = useState("Draft");
+import {
+    createReceipt,
+    getReceipts,
+    validateReceipt,
+    createDelivery,
+    getDeliveries,
+    validateDelivery,
+    getProducts,
+    getLocations,
+} from "../services/api";
 
-  const config = {
+const configs = {
     Receipts: {
-      icon: ArrowDownToLine,
-      eyebrow: "Operations / Inbound",
-      title: "Receipts",
-      description: "Record incoming inventory and add received quantities to stock.",
-      action: "Validate Receipt",
-      color: "green",
-      reference: "REC-001",
-      sourceLabel: "Supplier",
-      destinationLabel: "Destination Warehouse",
+        title: "Receipts",
+        subtitle: "Record incoming goods and update warehouse stock.",
+        icon: ArrowDownToLine,
+        color: "green",
     },
-
     Deliveries: {
-      icon: ArrowUpFromLine,
-      eyebrow: "Operations / Outbound",
-      title: "Deliveries",
-      description: "Prepare outgoing inventory and validate deliveries against stock.",
-      action: "Validate Delivery",
-      color: "orange",
-      reference: "DEL-001",
-      sourceLabel: "Source Warehouse",
-      destinationLabel: "Customer",
+        title: "Deliveries",
+        subtitle: "Manage outgoing goods and customer shipments.",
+        icon: ArrowUpFromLine,
+        color: "blue",
     },
-
     Transfers: {
-      icon: ArrowLeftRight,
-      eyebrow: "Operations / Internal",
-      title: "Internal Transfers",
-      description: "Move inventory between warehouses and internal locations.",
-      action: "Validate Transfer",
-      color: "olive",
-      reference: "TRF-001",
-      sourceLabel: "Source Location",
-      destinationLabel: "Destination Location",
+        title: "Internal Transfers",
+        subtitle: "Move inventory between internal locations.",
+        icon: ArrowLeftRight,
+        color: "purple",
     },
-
     Adjustments: {
-      icon: SlidersHorizontal,
-      eyebrow: "Operations / Inventory",
-      title: "Inventory Adjustments",
-      description: "Reconcile recorded stock with the physical inventory count.",
-      action: "Apply Adjustment",
-      color: "red",
-      reference: "ADJ-001",
-      sourceLabel: "Current Location",
-      destinationLabel: "Adjustment Reason",
+        title: "Inventory Adjustments",
+        subtitle: "Reconcile recorded stock with physical counts.",
+        icon: SlidersHorizontal,
+        color: "orange",
     },
-  };
+};
 
-  const current = config[type] || config.Receipts;
-  const Icon = current.icon;
+function OperationsPage({ type = "Receipts" }) {
+    const config = configs[type] || configs.Receipts;
+    const Icon = config.icon;
 
-  const accentClasses = {
-    green: {
-      icon: "bg-[#edf4ea] text-[#527452]",
-      badge: "bg-[#edf4ea] text-[#527452]",
-      button: "bg-[#275236] hover:bg-[#1f442d]",
-    },
+    const [records, setRecords] = useState([]);
+    const [products, setProducts] = useState([]);
+    const [locations, setLocations] = useState([]);
 
-    orange: {
-      icon: "bg-[#fff1e9] text-[#a65d49]",
-      badge: "bg-[#fff1e9] text-[#a65d49]",
-      button: "bg-[#8d6248] hover:bg-[#76503b]",
-    },
+    const isReceipt = type === "Receipts";
+    const isDelivery = type === "Deliveries";
 
-    olive: {
-      icon: "bg-[#f1f0df] text-[#6f753c]",
-      badge: "bg-[#f1f0df] text-[#6f753c]",
-      button: "bg-[#59632f] hover:bg-[#4c5528]",
-    },
+    const [loading, setLoading] = useState(isReceipt || isDelivery);
+    const [submitting, setSubmitting] = useState(false);
+    const [error, setError] = useState("");
+    const [success, setSuccess] = useState("");
 
-    red: {
-      icon: "bg-[#faece8] text-[#a65d49]",
-      badge: "bg-[#faece8] text-[#a65d49]",
-      button: "bg-[#8f4f40] hover:bg-[#783f32]",
-    },
-  };
+    const [form, setForm] = useState({
+        number: "",
+        party: "",
+        product: "",
+        location: "",
+        quantity: "",
+    });
 
-  const accent = accentClasses[current.color];
+    /*
+     * =========================
+     * LOAD RECEIPTS + FORM DATA
+     * =========================
+     */
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    setStatus("Validated");
-  };
+    useEffect(() => {
+        if (!isReceipt && !isDelivery) {
+            setLoading(false);
+            return;
+        }
+        loadData();
+    }, [type]);
 
-  return (
-    <div className="space-y-7">
-      {/* Header */}
-      <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7b776e]">
-            {current.eyebrow}
-          </p>
+    const loadData = async () => {
+        try {
+            setLoading(true);
+            setError("");
 
-          <div className="mt-2 flex items-center gap-3">
-            <div
-              className={`flex h-10 w-10 items-center justify-center rounded-lg ${accent.icon}`}
-            >
-              <Icon size={19} />
-            </div>
+            const [recordData, productData, locationData] =
+                await Promise.all([
+                    isReceipt ? getReceipts() : getDeliveries(),
+                    getProducts(),
+                    getLocations(),
+                ]);
 
-            <h2 className="text-3xl font-semibold tracking-tight text-[#292824]">
-              {current.title}
-            </h2>
-          </div>
+            setRecords(
+                Array.isArray(recordData)
+                    ? recordData
+                    : recordData?.receipts ||
+                      recordData?.deliveries ||
+                      recordData?.data ||
+                      []
+            );
 
-          <p className="mt-3 text-sm text-[#756f64]">
-            {current.description}
-          </p>
-        </div>
+            setProducts(
+                Array.isArray(productData)
+                    ? productData
+                    : productData?.products || productData?.data || []
+            );
 
-        <div className="flex items-center gap-2">
-          <span
-            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${accent.badge}`}
-          >
-            {status}
-          </span>
+            setLocations(
+                Array.isArray(locationData)
+                    ? locationData
+                    : locationData?.locations || locationData?.data || []
+            );
+        } catch (err) {
+            console.error("Failed to load operation data:", err);
+            setError(err.message || "Failed to load data.");
+        } finally {
+            setLoading(false);
+        }
+    };
 
-          <span className="text-xs text-[#918a7f]">
-            Reference: {current.reference}
-          </span>
-        </div>
-      </div>
+    /*
+     * =========================
+     * FORM HANDLING
+     * =========================
+     */
 
-      {/* Progress */}
-      <div className="rounded-xl border border-[#ded6c8] bg-[#fffdf8] px-6 py-5">
-        <div className="flex items-center">
-          <div className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[#275236] text-xs font-semibold text-white">
-              1
-            </div>
-            <span className="text-xs font-semibold text-[#292824]">
-              Create
-            </span>
-          </div>
+    const handleChange = (e) => {
+        const { name, value } = e.target;
 
-          <div className="mx-3 h-px flex-1 bg-[#ded6c8]" />
+        setForm((previous) => ({
+            ...previous,
+            [name]: value,
+        }));
 
-          <div className="flex items-center gap-2">
-            <div
-              className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
-                status === "Validated"
-                  ? "bg-[#275236] text-white"
-                  : "bg-[#ebe6dc] text-[#918a7f]"
-              }`}
-            >
-              2
-            </div>
-            <span className="text-xs font-semibold text-[#625d54]">
-              Validate
-            </span>
-          </div>
+        setError("");
+        setSuccess("");
+    };
 
-          <div className="mx-3 h-px flex-1 bg-[#ded6c8]" />
+    const handleCreate = async (e) => {
+        e.preventDefault();
 
-          <div className="flex items-center gap-2">
-            <div
-              className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
-                status === "Validated"
-                  ? "bg-[#275236] text-white"
-                  : "bg-[#ebe6dc] text-[#918a7f]"
-              }`}
-            >
-              3
-            </div>
-            <span className="text-xs font-semibold text-[#625d54]">
-              Stock Updated
-            </span>
-          </div>
-        </div>
-      </div>
+        if (
+            !form.number ||
+            !form.party ||
+            !form.product ||
+            !form.location ||
+            !form.quantity
+        ) {
+            setError(`Please fill in all ${isReceipt ? "receipt" : "delivery"} fields.`);
+            return;
+        }
 
-      {/* Main Content */}
-      <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
-        {/* Form */}
-        <form
-          onSubmit={handleSubmit}
-          className="rounded-xl border border-[#ded6c8] bg-[#fffdf8]"
-        >
-          <div className="border-b border-[#e7dfd2] px-6 py-5">
-            <div className="flex items-center gap-3">
-              <FileText size={18} className="text-[#777267]" />
+        if (Number(form.quantity) <= 0) {
+            setError("Quantity must be greater than 0.");
+            return;
+        }
 
-              <div>
-                <h3 className="text-base font-semibold text-[#292824]">
-                  Operation Details
-                </h3>
+        try {
+            setSubmitting(true);
+            setError("");
+            setSuccess("");
 
-                <p className="mt-1 text-xs text-[#918a7f]">
-                  Enter the information required to process this operation.
-                </p>
-              </div>
-            </div>
-          </div>
+            if (isReceipt) {
+                await createReceipt({
+                    receiptNumber: form.number,
+                    supplier: form.party,
+                    product: form.product,
+                    location: form.location,
+                    quantity: Number(form.quantity),
+                });
 
-          <div className="space-y-6 p-6">
-            {/* Reference + Product */}
-            <div className="grid gap-5 md:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-xs font-semibold text-[#625d54]">
-                  Reference
-                </label>
+                setSuccess(
+                    "Receipt created successfully. It is now waiting for validation."
+                );
+            } else {
+                await createDelivery({
+                    deliveryNumber: form.number,
+                    customer: form.party,
+                    product: form.product,
+                    location: form.location,
+                    quantity: Number(form.quantity),
+                });
 
-                <input
-                  value={current.reference}
-                  readOnly
-                  className="w-full rounded-lg border border-[#ddd5c8] bg-[#f7f3eb] px-3.5 py-2.5 text-sm font-medium text-[#625d54] outline-none"
-                />
-              </div>
+                setSuccess(
+                    "Delivery created successfully. Validate it to reduce stock."
+                );
+            }
 
-              <div>
-                <label className="mb-2 block text-xs font-semibold text-[#625d54]">
-                  Product
-                </label>
+            setForm({
+                number: "",
+                party: "",
+                product: "",
+                location: "",
+                quantity: "",
+            });
 
-                <select className="w-full rounded-lg border border-[#ddd5c8] bg-[#fcf8f1] px-3.5 py-2.5 text-sm text-[#625d54] outline-none focus:border-[#8a9b84]">
-                  <option>Steel Rods</option>
-                  <option>Copper Wire</option>
-                  <option>Aluminium Sheets</option>
-                  <option>Steel Plates</option>
-                </select>
-              </div>
-            </div>
+            await loadData();
+        } catch (err) {
+            console.error("Create failed:", err);
+            setError(
+                err.message ||
+                    `Failed to create ${isReceipt ? "receipt" : "delivery"}.`
+            );
+        } finally {
+            setSubmitting(false);
+        }
+    };
 
-            {/* Quantity */}
-            <div>
-              <label className="mb-2 block text-xs font-semibold text-[#625d54]">
-                Quantity
-              </label>
+    const handleValidate = async (id) => {
+        try {
+            setError("");
+            setSuccess("");
 
-              <div className="relative">
-                <Package
-                  size={16}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999287]"
-                />
+            if (isReceipt) {
+                await validateReceipt(id);
+                setSuccess(
+                    "Receipt validated. Stock has been updated and the movement has been logged."
+                );
+            } else {
+                await validateDelivery(id);
+                setSuccess(
+                    "Delivery validated. Stock has been reduced and the movement has been logged."
+                );
+            }
 
-                <input
-                  type="number"
-                  min="1"
-                  placeholder="Enter quantity"
-                  className="w-full rounded-lg border border-[#ddd5c8] bg-[#fcf8f1] py-2.5 pl-9 pr-16 text-sm text-[#292824] outline-none placeholder:text-[#a39c91] focus:border-[#8a9b84]"
-                />
+            await loadData();
+        } catch (err) {
+            console.error("Validation failed:", err);
+            setError(err.message || "Validation failed.");
+        }
+    };
 
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#999287]">
-                  units
-                </span>
-              </div>
-            </div>
+    /*
+     * =========================
+     * NON-RECEIPT OPERATIONS
+     * =========================
+     */
 
-            {/* Locations */}
-            <div className="grid gap-5 md:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-xs font-semibold text-[#625d54]">
-                  {current.sourceLabel}
-                </label>
-
-                <div className="relative">
-                  <MapPin
-                    size={16}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999287]"
-                  />
-
-                  <select className="w-full rounded-lg border border-[#ddd5c8] bg-[#fcf8f1] py-2.5 pl-9 pr-3 text-sm text-[#625d54] outline-none focus:border-[#8a9b84]">
-                    <option>Main Warehouse</option>
-                    <option>Production Floor</option>
-                    <option>Rack B</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-xs font-semibold text-[#625d54]">
-                  {current.destinationLabel}
-                </label>
-
-                <div className="relative">
-                  <MapPin
-                    size={16}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-[#999287]"
-                  />
-
-                  <select className="w-full rounded-lg border border-[#ddd5c8] bg-[#fcf8f1] py-2.5 pl-9 pr-3 text-sm text-[#625d54] outline-none focus:border-[#8a9b84]">
-                    <option>Main Warehouse</option>
-                    <option>Production Floor</option>
-                    <option>Rack B</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div>
-              <label className="mb-2 block text-xs font-semibold text-[#625d54]">
-                Notes
-              </label>
-
-              <textarea
-                rows="4"
-                placeholder="Add any relevant notes..."
-                className="w-full resize-none rounded-lg border border-[#ddd5c8] bg-[#fcf8f1] px-3.5 py-3 text-sm text-[#292824] outline-none placeholder:text-[#a39c91] focus:border-[#8a9b84]"
-              />
-            </div>
-
-            {/* Actions */}
-            <div className="flex flex-col-reverse justify-end gap-3 border-t border-[#e7dfd2] pt-6 sm:flex-row">
-              <button
-                type="button"
-                onClick={() => setStatus("Draft")}
-                className="rounded-lg border border-[#d9d1c4] px-5 py-2.5 text-sm font-semibold text-[#625d54] transition hover:bg-[#f6f1e8]"
-              >
-                Save as Draft
-              </button>
-
-              <button
-                type="submit"
-                className={`rounded-lg px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition ${accent.button}`}
-              >
-                {current.action}
-              </button>
-            </div>
-          </div>
-        </form>
-
-        {/* Side Information */}
-        <div className="space-y-6">
-          {/* Current Status */}
-          <section className="rounded-xl border border-[#ded6c8] bg-[#fffdf8]">
-            <div className="border-b border-[#e7dfd2] px-5 py-4">
-              <h3 className="text-sm font-semibold text-[#292824]">
-                Current Status
-              </h3>
-            </div>
-
-            <div className="space-y-4 p-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#edf4ea] text-[#527452]">
-                  <CheckCircle2 size={16} />
-                </div>
-
+    if (!isReceipt && !isDelivery) {
+        return (
+            <div className="space-y-7">
                 <div>
-                  <p className="text-xs font-semibold text-[#625d54]">
-                    Stock Available
-                  </p>
-                  <p className="mt-0.5 text-[11px] text-[#918a7f]">
-                    148 units currently recorded
-                  </p>
-                </div>
-              </div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7b776e]">
+                        Operations
+                    </p>
 
-              <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#f1eee7] text-[#777267]">
-                  <Clock3 size={16} />
+                    <div className="mt-2 flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#e9e8d0] text-[#275236]">
+                            <Icon size={19} />
+                        </div>
+
+                        <h2 className="text-3xl font-semibold tracking-tight text-[#292824]">
+                            {config.title}
+                        </h2>
+                    </div>
+
+                    <p className="mt-2 text-sm text-[#756f64]">
+                        {config.subtitle}
+                    </p>
                 </div>
 
+                <div className="rounded-xl border border-[#ded6c8] bg-[#fffdf8] p-8">
+                    <div className="mx-auto max-w-lg text-center">
+                        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-[#e9e8d0] text-[#275236]">
+                            <Icon size={25} />
+                        </div>
+
+                        <h3 className="mt-5 text-lg font-semibold text-[#292824]">
+                            {config.title} backend integration
+                        </h3>
+
+                        <p className="mt-2 text-sm leading-6 text-[#756f64]">
+                            The frontend workflow is ready. This operation
+                            will be connected once its backend request and
+                            validation contract is wired.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    const noun = isReceipt ? "Receipt" : "Delivery";
+    const partyLabel = isReceipt ? "Supplier" : "Customer";
+    const numberPlaceholder = isReceipt ? "REC-001" : "DEL-001";
+
+    return (
+        <div className="space-y-7">
+            <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
                 <div>
-                  <p className="text-xs font-semibold text-[#625d54]">
-                    Last Movement
-                  </p>
-                  <p className="mt-0.5 text-[11px] text-[#918a7f]">
-                    12 minutes ago
-                  </p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#7b776e]">
+                        Operations
+                    </p>
+                    <h2 className="mt-2 text-3xl font-semibold tracking-tight text-[#292824]">
+                        {config.title}
+                    </h2>
+                    <p className="mt-2 text-sm text-[#756f64]">{config.subtitle}</p>
                 </div>
-              </div>
-            </div>
-          </section>
 
-          {/* Stock Impact */}
-          <section className="rounded-xl border border-[#ded6c8] bg-[#fffdf8]">
-            <div className="border-b border-[#e7dfd2] px-5 py-4">
-              <h3 className="text-sm font-semibold text-[#292824]">
-                Stock Impact
-              </h3>
-
-              <p className="mt-1 text-[11px] text-[#918a7f]">
-                What happens after validation
-              </p>
+                <div className="flex items-center gap-2 rounded-lg border border-[#ded6c8] bg-[#fffdf8] px-3 py-2 text-xs text-[#756f64]">
+                    <Clock3 size={14} />
+                    Draft → Validate → Stock Updated
+                </div>
             </div>
 
-            <div className="p-5">
-              {type === "Receipts" && (
-                <div className="rounded-lg bg-[#edf4ea] p-4">
-                  <p className="text-xs font-semibold text-[#527452]">
-                    Inventory increases
-                  </p>
-                  <p className="mt-1 text-[11px] leading-5 text-[#668166]">
-                    Validating this receipt will add the received quantity to
-                    the selected warehouse stock level.
-                  </p>
+            {error && (
+                <div className="flex items-center gap-2 rounded-lg border border-[#e4c9b8] bg-[#f8ede6] px-4 py-3 text-sm text-[#9a5f3c]">
+                    <AlertTriangle size={16} />
+                    {error}
                 </div>
-              )}
+            )}
 
-              {type === "Deliveries" && (
-                <div className="rounded-lg bg-[#fff1e9] p-4">
-                  <p className="text-xs font-semibold text-[#a65d49]">
-                    Inventory decreases
-                  </p>
-                  <p className="mt-1 text-[11px] leading-5 text-[#956b5c]">
-                    Validating this delivery will deduct the delivered
-                    quantity from the selected source location.
-                  </p>
+            {success && (
+                <div className="flex items-center gap-2 rounded-lg border border-[#cdddc9] bg-[#edf5ed] px-4 py-3 text-sm text-[#527452]">
+                    <CheckCircle2 size={16} />
+                    {success}
                 </div>
-              )}
+            )}
 
-              {type === "Transfers" && (
-                <div className="rounded-lg bg-[#f1f0df] p-4">
-                  <p className="text-xs font-semibold text-[#6f753c]">
-                    Location changes
-                  </p>
-                  <p className="mt-1 text-[11px] leading-5 text-[#7d8058]">
-                    Total company inventory remains unchanged while stock
-                    moves between internal locations.
-                  </p>
+            <section className="rounded-xl border border-[#ded6c8] bg-[#fffdf8]">
+                <div className="border-b border-[#e7dfd2] px-6 py-5">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#e9e8d0] text-[#275236]">
+                            <Icon size={18} />
+                        </div>
+                        <div>
+                            <h3 className="text-base font-semibold text-[#292824]">
+                                Create {noun}
+                            </h3>
+                            <p className="mt-1 text-xs text-[#918a7e]">
+                                {isReceipt
+                                    ? "Add incoming stock from a supplier."
+                                    : "Record outgoing stock for a customer."}
+                            </p>
+                        </div>
+                    </div>
                 </div>
-              )}
 
-              {type === "Adjustments" && (
-                <div className="rounded-lg bg-[#faece8] p-4">
-                  <p className="text-xs font-semibold text-[#a65d49]">
-                    Inventory reconciled
-                  </p>
-                  <p className="mt-1 text-[11px] leading-5 text-[#956b5c]">
-                    The adjustment updates recorded stock to match the
-                    verified physical quantity and creates a ledger entry.
-                  </p>
+                <form onSubmit={handleCreate} className="grid gap-5 p-6 md:grid-cols-2">
+                    <div>
+                        <label className="mb-2 flex items-center gap-2 text-xs font-semibold text-[#625d54]">
+                            <Hash size={14} /> {noun} Number
+                        </label>
+                        <input
+                            name="number"
+                            value={form.number}
+                            onChange={handleChange}
+                            placeholder={numberPlaceholder}
+                            className="w-full rounded-lg border border-[#ddd5c8] bg-[#fcf8f1] px-3 py-2.5 text-sm outline-none placeholder:text-[#aaa397] focus:border-[#8a9b84]"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="mb-2 flex items-center gap-2 text-xs font-semibold text-[#625d54]">
+                            <User size={14} /> {partyLabel}
+                        </label>
+                        <input
+                            name="party"
+                            value={form.party}
+                            onChange={handleChange}
+                            placeholder={`${partyLabel} name`}
+                            className="w-full rounded-lg border border-[#ddd5c8] bg-[#fcf8f1] px-3 py-2.5 text-sm outline-none placeholder:text-[#aaa397] focus:border-[#8a9b84]"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="mb-2 flex items-center gap-2 text-xs font-semibold text-[#625d54]">
+                            <Package size={14} /> Product
+                        </label>
+                        <select
+                            name="product"
+                            value={form.product}
+                            onChange={handleChange}
+                            className="w-full rounded-lg border border-[#ddd5c8] bg-[#fcf8f1] px-3 py-2.5 text-sm text-[#625d54] outline-none focus:border-[#8a9b84]"
+                        >
+                            <option value="">Select product</option>
+                            {products.map((product) => (
+                                <option key={product._id || product.id} value={product._id || product.id}>
+                                    {product.name} {product.sku ? `— ${product.sku}` : ""}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="mb-2 flex items-center gap-2 text-xs font-semibold text-[#625d54]">
+                            <MapPin size={14} /> Location
+                        </label>
+                        <select
+                            name="location"
+                            value={form.location}
+                            onChange={handleChange}
+                            className="w-full rounded-lg border border-[#ddd5c8] bg-[#fcf8f1] px-3 py-2.5 text-sm text-[#625d54] outline-none focus:border-[#8a9b84]"
+                        >
+                            <option value="">Select location</option>
+                            {locations.map((location) => (
+                                <option key={location._id || location.id} value={location._id || location.id}>
+                                    {location.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="mb-2 block text-xs font-semibold text-[#625d54]">
+                            Quantity
+                        </label>
+                        <input
+                            name="quantity"
+                            type="number"
+                            min="1"
+                            value={form.quantity}
+                            onChange={handleChange}
+                            placeholder="100"
+                            className="w-full rounded-lg border border-[#ddd5c8] bg-[#fcf8f1] px-3 py-2.5 text-sm outline-none placeholder:text-[#aaa397] focus:border-[#8a9b84]"
+                        />
+                    </div>
+
+                    <div className="flex items-end justify-end">
+                        <button
+                            type="submit"
+                            disabled={submitting}
+                            className="inline-flex items-center gap-2 rounded-lg bg-[#275236] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#1f442d] disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            + {submitting ? "Creating..." : `Create ${noun}`}
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <section className="overflow-hidden rounded-xl border border-[#ded6c8] bg-[#fffdf8]">
+                <div className="flex items-center justify-between border-b border-[#e7dfd2] px-6 py-5">
+                    <div>
+                        <h3 className="text-base font-semibold text-[#292824]">
+                            Recent {config.title}
+                        </h3>
+                        <p className="mt-1 text-xs text-[#918a7e]">
+                            Draft records can be validated to update stock.
+                        </p>
+                    </div>
+                    <span className="rounded-full bg-[#eef1e7] px-2.5 py-1 text-[10px] font-semibold text-[#527452]">
+                        {records.length} records
+                    </span>
                 </div>
-              )}
-            </div>
-          </section>
 
-          {/* Ledger note */}
-          <div className="rounded-xl border border-[#ded6c8] bg-[#f7f2e9] p-5">
-            <p className="text-xs font-semibold text-[#625d54]">
-              Ledger tracking
-            </p>
+                {loading ? (
+                    <div className="px-6 py-12 text-center text-sm text-[#756f64]">
+                        Loading {config.title.toLowerCase()}...
+                    </div>
+                ) : records.length === 0 ? (
+                    <div className="px-6 py-12 text-center">
+                        <Package size={28} className="mx-auto text-[#aaa397]" />
+                        <p className="mt-3 text-sm font-medium text-[#625d54]">
+                            No {config.title.toLowerCase()} found
+                        </p>
+                    </div>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full min-w-[850px] text-left">
+                            <thead>
+                                <tr className="border-b border-[#e7dfd2] bg-[#faf6ef]">
+                                    {["Document", "Product", partyLabel, "Location", "Quantity", "Status", "Action"].map((h) => (
+                                        <th key={h} className="px-4 py-3.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#898277]">
+                                            {h}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#eee7db]">
+                                {records.map((record) => {
+                                    const isDraft = record.status === "draft";
+                                    const number = isReceipt ? record.receiptNumber : record.deliveryNumber;
+                                    const party = isReceipt ? record.supplier : record.customer;
 
-            <p className="mt-2 text-[11px] leading-5 text-[#8c857a]">
-              Once validated, this operation will create an immutable stock
-              movement in the inventory ledger.
-            </p>
-          </div>
+                                    return (
+                                        <tr key={record._id} className="transition hover:bg-[#fcf9f3]">
+                                            <td className="px-4 py-4 text-sm font-semibold text-[#292824]">{number}</td>
+                                            <td className="px-4 py-4">
+                                                <p className="text-sm font-medium text-[#292824]">{record.product?.name || "Unknown product"}</p>
+                                                <p className="mt-0.5 text-xs text-[#918a7e]">{record.product?.sku || "—"}</p>
+                                            </td>
+                                            <td className="px-4 py-4 text-sm text-[#625d54]">{party}</td>
+                                            <td className="px-4 py-4 text-sm text-[#625d54]">{record.location?.name || "—"}</td>
+                                            <td className="px-4 py-4 text-sm font-semibold text-[#292824]">{record.quantity}</td>
+                                            <td className="px-4 py-4">
+                                                <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold ${isDraft ? "bg-[#fff3df] text-[#a4773d]" : "bg-[#edf4ea] text-[#527452]"}`}>
+                                                    {record.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-4">
+                                                {isDraft ? (
+                                                    <button
+                                                        onClick={() => handleValidate(record._id)}
+                                                        className="inline-flex items-center gap-1.5 rounded-lg bg-[#275236] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#1f442d]"
+                                                    >
+                                                        <CheckCircle2 size={14} /> Validate
+                                                    </button>
+                                                ) : (
+                                                    <span className="text-xs font-medium text-[#527452]">Completed</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </section>
         </div>
-      </div>
-    </div>
-  );
+    );
+
 }
+
 
 export default OperationsPage;
